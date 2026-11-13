@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <script src="i18n.v1.js"></script>
-<script src="lang.en.v1.js"></script>
-<script src="lang.ko.v1.js"></script>
+<script src="lang.en.v1.js?v=2"></script>
+<script src="lang.ko.v1.js?v=2"></script>
+<script src="theme.v1.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>表紙入稿メーカー | 同人誌の表紙を入稿用の CMYK PDF に</title>
 <meta name="description" content="同人誌の表紙の絵（表・裏、または見開き）から、表1・背・表4 をつないだ入稿用の表紙データ（塗り足しつき・CMYK・350dpi の PDF）をブラウザだけで作れます。背幅の計算、描く人用のガイド画像、解像度とインク総量の確認つき。">
@@ -21,111 +22,260 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
+  /* The shared look of the shiki365 tools ("Verdigris"): a tabletop at night (dark) and a character sheet (light).
+     This block is the same in every tool: its source is _dev/design/tool.css in the shiki365.github.io
+     repository (put in by _dev/design/apply.js). Rules for one tool only go after it, under "This tool only".
+     Ink-navy surfaces, paper-white text, one verdigris signal color that is never confused with the
+     orange warnings. Headings sit on a rule like the sections of a character sheet; every control has the
+     same visible edge; the preview is left plain so nothing looks like part of the user's design.
+     Sections: tokens (dark, light) / page / panel and tabs / rows and controls / preview column / notes. */
   :root {
     color-scheme: dark;
-    --bg: #15161a; --panel: #1e1f26; --line: #303240; --line-soft: #282a36;
-    --fg: #e7e7ea; --muted: #9a9aa5; --accent: #6b70ff;
-    --button: #575cf5; /* darker than --accent so white text passes 4.5:1 */
-    --ok: #5fd08a; --warn: #f0b94a; --bad: #ff7a7a;
+    --bg: #10141a; --panel: #171c24; --raised: #1e242e; --line: #2c3440; --line-soft: #222a35;
+    --frame: #6b7686;   /* edges of boxes and controls: 3:1 or more against --bg and --panel */
+    --fg: #e9e6df; --muted: #9ba4ae; --accent: #5ccfc0; --link: #7fdccf;
+    --button: #5ccfc0; --button-fg: #06211d; --button-hover: #7adbce;
+    --field: #0c0f14; --control: #232b36; --control-hover: #2d3744;
+    --pick: #17302f; --warn: #ffb86b; --error: #ff8f8f; --danger-bg: #4a2529; --danger-line: #a05560;
+    --mono: Consolas, "BIZ UDGothic", ui-monospace, monospace;
   }
+  /* Light: follows the OS, unless a choice made with the switch (theme.v1.js) sets data-theme. */
+  @media (prefers-color-scheme: light) { :root:not([data-theme=dark]) {
+    color-scheme: light;
+    --bg: #f3f0e9; --panel: #fcfbf7; --raised: #efece4; --line: #d6d1c5; --line-soft: #e7e3d9;
+    --frame: #8b8778;
+    --fg: #1b1f24; --muted: #585e66; --accent: #0e6a5c; --link: #0b5c50;
+    --button: #0e6a5c; --button-fg: #ffffff; --button-hover: #0a5448;
+    --field: #ffffff; --control: #efece4; --control-hover: #e3dfd4;
+    --pick: #dcefe9; --warn: #8a4b00; --error: #b3261e; --danger-bg: #f7dcdc; --danger-line: #c47b7b;
+  } }
+  :root[data-theme=light] {
+    color-scheme: light;
+    --bg: #f3f0e9; --panel: #fcfbf7; --raised: #efece4; --line: #d6d1c5; --line-soft: #e7e3d9;
+    --frame: #8b8778;
+    --fg: #1b1f24; --muted: #585e66; --accent: #0e6a5c; --link: #0b5c50;
+    --button: #0e6a5c; --button-fg: #ffffff; --button-hover: #0a5448;
+    --field: #ffffff; --control: #efece4; --control-hover: #e3dfd4;
+    --pick: #dcefe9; --warn: #8a4b00; --error: #b3261e; --danger-bg: #f7dcdc; --danger-line: #c47b7b;
+  }
+
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--fg);
-         font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif; font-size: 13px; }
-  header { padding: 18px 24px 14px; border-bottom: 1px solid var(--line); }
-  h1 { margin: 0 0 4px; font-size: 17px; }
-  header p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
-  main { display: grid; gap: 20px; padding: 20px 24px 40px;
-         grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); align-items: start; }
-  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); padding: 16px; } header, footer { padding-left: 16px; padding-right: 16px; } }
+         font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif; font-size: 13px; line-height: 1.5; }
 
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px 16px; min-width: 0; }
-  .tabbar { display: flex; gap: 2px; margin: 0 -16px; padding: 8px 8px 0; border-bottom: 1px solid var(--line);
-            position: sticky; top: 0; background: var(--panel); z-index: 2; border-radius: 10px 10px 0 0;
+  /* ---- Page */
+  header { padding: 10px 20px 14px; border-bottom: 1px solid var(--line); }
+  .topline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 16px; margin-bottom: 8px; }
+  .prefs { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 18px; }
+  h1 { margin: 0 0 4px; font-size: 18px; line-height: 1.4; letter-spacing: .02em; }
+  /* The mark: a small die seen from a corner. */
+  h1::before { content: ""; display: inline-block; width: 9px; height: 9px; margin: 0 11px 0 3px;
+               background: var(--accent); transform: rotate(45deg); vertical-align: 2px; }
+  header p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; max-width: 84em; }
+  .home-link { display: inline-block; color: var(--muted); font-size: 12px; text-decoration: none; }
+  .home-link:hover { color: var(--fg); text-decoration: underline; }
+  .home-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .lang-switch, .theme-switch { margin: 0; color: var(--muted); font-size: 12px; }
+  .lang-switch a { color: var(--link); text-underline-offset: 3px; }
+  .lang-switch a[aria-current] { color: var(--fg); font-weight: 700; text-decoration: none; }
+  .theme-switch::before { content: "◐ " / ""; }
+  .theme-switch button { background: none; border: 0; border-radius: 0; padding: 0; min-height: 0; font: inherit;
+                         color: var(--link); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .theme-switch button:hover { background: none; color: var(--fg); }
+  .theme-switch button[aria-pressed=true] { color: var(--fg); font-weight: 700; text-decoration: none; }
+
+  main { display: grid; gap: 20px; padding: 16px 20px 40px;
+         grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); padding-inline: 12px; } header, footer { padding-inline: 12px; } }
+
+  /* ---- Panel and tabs */
+  .panel { background: var(--panel); border: 1px solid var(--frame); border-radius: 6px; padding: 0 14px 16px; min-width: 0; }
+  .tabbar { display: flex; gap: 0; margin: 0 -14px; padding: 0; border-bottom: 1px solid var(--line);
+            position: sticky; top: 0; background: var(--raised); z-index: 2; border-radius: 5px 5px 0 0;
+            /* Labels too long for a narrow screen (another language) scroll here instead of widening the panel. */
             overflow-x: auto; scrollbar-width: none; }
-  .tabbar button { flex: 1; border: 0; border-bottom: 2px solid transparent; border-radius: 0; white-space: nowrap;
-                   background: transparent; color: var(--muted); padding: 8px 2px 9px; }
+  .tabbar button { flex: 1 0 auto; border: 0; border-radius: 0; white-space: nowrap; background: transparent;
+                   color: var(--muted); padding: 9px 6px 10px; font-size: 12.5px; }
   .tabbar button:hover { background: transparent; color: var(--fg); }
-  .tabbar button[aria-selected=true] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 700; }
+  .tabbar button[aria-selected=true] { color: var(--fg); font-weight: 700; background: var(--panel);
+                                        box-shadow: inset 0 -2px 0 var(--accent); }
+  .tabbar button:focus-visible { outline-offset: -2px; }
 
-  fieldset { border: 0; border-top: 1px solid var(--line-soft); margin: 14px 0 0; padding: 12px 0 0; min-width: 0; }
-  section > fieldset:first-child { border-top: 0; }
-  legend { padding: 0; color: var(--muted); font-size: 11px; letter-spacing: .08em; }
-  .row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; align-items: center; margin-top: 10px; }
-  .row > label { color: var(--muted); }
+  /* A section of the sheet: its name sits on the rule. */
+  fieldset { border: 0; border-top: 1px solid var(--line); margin: 18px 0 0; padding: 2px 0 0; min-width: 0; }
+  section > fieldset:first-child, form > fieldset:first-child { border-top-color: transparent; margin-top: 8px; }
+  legend { padding: 0 10px 0 0; color: var(--fg); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+  legend::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 9px 0 2px;
+                   background: var(--accent); transform: rotate(45deg); vertical-align: 1px; }
+
+  /* ---- Rows and controls */
+  .row { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px; align-items: center; margin-top: 8px; }
+  .row > label { color: var(--muted); font-size: 12.5px; }
   .row.wide { grid-template-columns: minmax(0, 1fr); }
+  .row.sub > label { padding-left: 10px; border-left: 2px solid var(--line); }
+  .with-value { display: grid; grid-template-columns: minmax(0, 1fr) 52px; gap: 8px; align-items: center; }
+  .with-value output, .color-alpha output { color: var(--fg); text-align: right; font-family: var(--mono); font-size: 12px;
+                                            font-variant-numeric: tabular-nums; }
   .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; }
-  .with-value { display: grid; grid-template-columns: minmax(0, 1fr) 54px; gap: 8px; align-items: center; }
-  .with-value output { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
-  .unit { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; color: var(--muted); }
+  .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: center; }
+  .trio span { display: grid; gap: 2px; color: var(--muted); font-size: 11px; }
+  .color-alpha { display: grid; grid-template-columns: 56px minmax(0, 1fr) 44px; gap: 8px; align-items: center; }
+  .checks { display: grid; gap: 5px; }
 
   select, input[type=text], input[type=number], textarea {
-    width: 100%; background: #14151b; color: var(--fg); font: inherit;
-    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
-  textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
-  input[type=color] { width: 100%; height: 30px; padding: 2px; background: #14151b;
-                      border: 1px solid var(--line); border-radius: 6px; }
-  input[type=range] { width: 100%; accent-color: var(--accent); }
-  input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 15px; height: 15px; vertical-align: -3px; }
-  select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-visible, .slot:focus-visible {
+    width: 100%; background-color: var(--field); color: var(--fg); font: inherit;
+    border: 1px solid var(--frame); border-radius: 4px; padding: 4px 8px; min-height: 28px; }
+  /* Own arrow for the pull-downs, drawn with two gradients so it follows the theme. */
+  select { appearance: none; -webkit-appearance: none; padding-right: 26px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+  input[type=number] { font-family: var(--mono); }
+  select:hover, input[type=text]:hover, input[type=number]:hover, textarea:hover { border-color: var(--fg); }
+  input[type=color] { width: 100%; height: 28px; padding: 2px; background: var(--field);
+                      border: 1px solid var(--frame); border-radius: 4px; cursor: pointer; }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: 0; border-radius: 2px; }
+  input[type=color]::-moz-color-swatch { border: 0; border-radius: 2px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 20px; margin: 0; }
+  input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 15px; height: 15px; vertical-align: -3px; margin: 0 5px 0 0; }
+  select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible {
     outline: 2px solid var(--accent); outline-offset: 1px; }
-  .desc { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+  .desc { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.75; }
   .desc b { color: var(--fg); }
-  .desc a, .checks a { color: #a8abff; }
+  .desc code { font-family: var(--mono); color: var(--fg); }
+  .check { color: var(--fg); cursor: pointer; }
+  .tag31 { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--line); border-radius: 3px;
+           color: var(--muted); font-family: var(--mono); font-size: 10px; line-height: 1.5; vertical-align: 1px; }
+
+  button { background: var(--control); color: var(--fg); border: 1px solid var(--frame);
+           border-radius: 4px; padding: 5px 13px; font: inherit; cursor: pointer; }
+  button:hover { background: var(--control-hover); border-color: var(--fg); }
+  button.primary { background: var(--button); border-color: var(--button); color: var(--button-fg); font-weight: 700; }
+  button.primary:hover { background: var(--button-hover); border-color: var(--button-hover); }
+  button.small { padding: 3px 9px; font-size: 12px; }
+  button.danger:hover { background: var(--danger-bg); border-color: var(--danger-line); }
+  button:disabled { opacity: .45; cursor: default; }
+  .btns { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  /* ---- Preview column */
+  .stage-wrap { position: sticky; top: 16px; display: grid; gap: 10px; min-width: 0; }
+  .stage { position: relative; overflow: hidden; border: 1px solid var(--frame); border-radius: 6px;
+           min-height: 240px; display: grid; place-items: center; padding: 28px 16px; }
+  .stage.bg-checker { background-color: #cfcfd6;
+    background-image: linear-gradient(45deg, #9a9aa5 25%, transparent 25% 75%, #9a9aa5 75%),
+                      linear-gradient(45deg, #9a9aa5 25%, transparent 25% 75%, #9a9aa5 75%);
+    background-size: 24px 24px; background-position: 0 0, 12px 12px; }
+  .stage.bg-dark { background-color: #26272e; }
+  .stage.bg-light { background-color: #f2f2f4; }
+  .stage.bg-scene { background: radial-gradient(ellipse at 30% 20%, #6d7fa8, transparent 60%),
+                    radial-gradient(ellipse at 80% 90%, #a8735a, transparent 55%), #2d3348; }
+  .frame-box { position: relative; outline: 1px dashed rgba(255, 64, 160, .85); outline-offset: 0; }
+  /* color-scheme must match the page inside, or Chromium paints the iframe opaque white (this page may be dark). */
+  .frame-box iframe { position: absolute; left: 0; top: 0; border: 0; background: transparent; transform-origin: 0 0; color-scheme: normal; }
+  .stage-info { position: absolute; left: 8px; bottom: 8px; padding: 1px 8px; border-radius: 3px; font-size: 11px;
+                color: #fff; background: rgba(0, 0, 0, .66); }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .bar .spacer { flex: 1; }
+  .bar select { width: auto; }
+  .bar input[type=text] { width: 160px; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--frame); border-radius: 4px; overflow: hidden; }
+  .seg button { border: 0; border-right: 1px solid var(--line); border-radius: 0; padding: 4px 11px; background: transparent; }
+  .seg button:last-child { border-right: 0; }
+  .seg button:hover { background: var(--control); }
+  .seg button[aria-pressed=true] { background: var(--fg); color: var(--bg); font-weight: 700; }
+  .status { color: var(--muted); font-size: 12px; min-height: 1.5em; margin: 0; }
+  .status.error { color: var(--error); }
+  .size-note { color: var(--fg); font-size: 12.5px; }
+  .size-note b { font-family: var(--mono); font-size: 14px; color: var(--accent); }
+
+  .tester, .source-url { background: var(--panel); border: 1px solid var(--frame); border-radius: 6px; padding: 10px 12px; display: grid; gap: 8px; }
+  .tester h2, .source-url h2 { margin: 0; font-size: 12px; color: var(--muted); font-weight: 400; }
+  .source-url .missing { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .source-url .warn { color: var(--warn); font-size: 12px; line-height: 1.7; }
+  .desc.warn-text { color: var(--warn); }
+  .custom { display: grid; grid-template-columns: 130px 110px minmax(0, 1fr); gap: 5px; align-items: center; }
+  .custom input[type=text] { width: 100%; }
+  @media (max-width: 560px) { .custom { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .custom .grow { grid-column: 1 / -1; } }
+  /* Save / copy is where the work ends: its own box with the signal color on its edge. */
+  .source-url + .bar, .tester + .bar { padding: 10px 12px; border: 1px solid var(--frame); border-radius: 6px; background: var(--raised);
+                                       box-shadow: inset 3px 0 0 var(--accent); }
+
+  details.css-out summary { cursor: pointer; color: var(--muted); }
+  details.css-out textarea { margin-top: 8px; height: 280px; font-family: var(--mono); font-size: 12px; white-space: pre; }
+
+  /* ---- Notes and footer */
+  .note { color: var(--muted); font-size: 12px; line-height: 1.85; margin: 0; }
+  .note code { font-family: var(--mono); background: var(--field); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--fg); }
+  .note h2 { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--fg); margin: 20px 0 6px; letter-spacing: .04em; }
+  .note h2::before { content: ""; flex: none; width: 6px; height: 6px; margin-left: 2px; background: var(--accent); transform: rotate(45deg); }
+  .note h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .note ol, .note ul { margin: 6px 0; padding-left: 1.5em; }
+  .note li::marker { color: var(--accent); }
+  .note b { color: var(--fg); }
+  .note a { color: var(--link); }
+  footer { border-top: 1px solid var(--line); padding: 14px 20px 40px; color: var(--muted); font-size: 12px; line-height: 1.9; }
+  footer a { color: var(--link); }
+
+  /* The font picker dialog (pcfonts.v2.js) reads the page variables; its fixed hover colors are set here. */
+  body .pcf-dialog { border-radius: 6px; border-color: var(--frame); }
+  body .pcf-list button.pcf-item:hover { background: var(--control); }
+  body .pcf-list button.pcf-item[aria-current=true] { background: var(--pick); }
+
+  /* ---- This tool only (cover print maker): picture slots, the canvas view and the checklist on the right. */
+  :root { --ok: #5fd08a; --bad: #ff7a7a; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme=dark]) { --ok: #1f7a45; --bad: #b3261e; } }
+  :root[data-theme=light] { --ok: #1f7a45; --bad: #b3261e; }
+
+  textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
+  input[type=radio] { accent-color: var(--accent); width: 14px; height: 14px; vertical-align: -3px; margin: 0 4px 0 0; }
+  .unit { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; color: var(--muted); }
   .choice { display: flex; flex-wrap: wrap; gap: 6px 14px; }
   .choice label { cursor: pointer; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .desc a, .checks a { color: var(--link); }
+  .finder-link { border-left: 2px solid var(--accent); padding-left: 8px; }
+  details summary { cursor: pointer; color: var(--fg); }
+  code { word-break: break-all; font-family: var(--mono); }
+  .icc-name { color: var(--fg); font-weight: 700; word-break: break-all; }
+  .off { display: none !important; }
+  progress { width: 100%; height: 6px; accent-color: var(--accent); }
+  .panel > .status { margin-top: 10px; line-height: 1.6; min-height: 1.6em; }
 
-  button { background: #2a2c38; color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
-           padding: 6px 12px; font: inherit; cursor: pointer; }
-  button:hover { background: #343747; }
-  button.primary { background: var(--button); border-color: var(--button); color: #fff; font-weight: 700; }
-  button.primary:hover { background: #6267ff; }
-  button:disabled { opacity: .5; cursor: default; }
-  .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-
+  /* Picture slots: click or drop a picture. */
   .slots { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 10px; }
   .slots.one { grid-template-columns: minmax(0, 1fr); }
-  .slot { position: relative; border: 1px dashed var(--line); border-radius: 8px; padding: 8px; min-height: 120px;
-          display: grid; align-content: center; justify-items: center; gap: 6px; text-align: center; cursor: pointer;
-          color: var(--muted); background: #17181e; }
-  .slot.over { border-color: var(--accent); background: #1d1f2c; }
-  .slot img { max-width: 100%; max-height: 120px; object-fit: contain; border-radius: 4px; }
+  .slot { position: relative; border: 1px dashed var(--frame); padding: 8px; min-height: 120px; display: grid;
+          align-content: center; justify-items: center; gap: 6px; text-align: center; cursor: pointer;
+          color: var(--muted); background: var(--field); }
+  .slot.over { border-color: var(--accent); border-style: solid; background: var(--raised); }
+  .slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .slot img { max-width: 100%; max-height: 120px; object-fit: contain; }
   .slot .name { font-weight: 700; color: var(--fg); }
   .slot .info { font-size: 11px; }
   .slot .clear { position: absolute; top: 4px; right: 4px; padding: 0 7px; font-size: 12px; }
 
-  .stage { display: grid; gap: 12px; min-width: 0; }
-  .view { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
-  .view-bar { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-bottom: 10px; color: var(--muted); }
-  .view-bar .size { margin-left: auto; font-variant-numeric: tabular-nums; }
-  .canvas-wrap { background: repeating-conic-gradient(#2a2b33 0 25%, #23242b 0 50%) 0 0 / 16px 16px; border-radius: 6px; overflow: hidden; }
+  /* The right column. Here .stage is the column of boxes (view and checklist), not a preview frame. */
+  .stage { display: grid; gap: 10px; min-width: 0; padding: 0; min-height: 0; border: 0; border-radius: 0;
+           overflow: visible; background: none; place-items: initial; }
+  .view, .checks { background: var(--panel); border: 1px solid var(--frame); padding: 10px 12px; min-width: 0; }
+  .view-bar { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-bottom: 8px; color: var(--muted); }
+  .view-bar .size { margin-left: auto; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+  /* The cover sits on a dark checker in both themes, like the other tools' previews. */
+  .canvas-wrap { border: 1px solid var(--line); overflow: hidden;
+                 background: repeating-conic-gradient(#2a2b33 0 25%, #23242b 0 50%) 0 0 / 16px 16px; }
   #preview { display: block; width: 100%; height: auto; }
-  .checks { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-  .checks h2 { margin: 0 0 6px; font-size: 13px; }
+  .checks h2 { margin: 0 0 6px; color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .06em; }
   .checks ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .checks li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; line-height: 1.6; }
   .checks li::before { content: "・"; color: var(--muted); }
   .checks li.ok::before { content: "✓"; color: var(--ok); }
   .checks li.warn::before { content: "!"; color: var(--warn); font-weight: 700; text-align: center; }
   .checks li.bad::before { content: "×"; color: var(--bad); font-weight: 700; text-align: center; }
-  .status { margin-top: 10px; color: var(--muted); line-height: 1.6; min-height: 1.6em; }
-  .status.error { color: var(--bad); }
-  progress { width: 100%; height: 6px; accent-color: var(--accent); }
-  .icc-name { color: var(--fg); font-weight: 700; word-break: break-all; }
-  code { word-break: break-all; }
-  .off { display: none !important; }
-  .finder-link { border-left: 2px solid var(--accent); padding-left: 8px; }
-  details summary { cursor: pointer; color: var(--fg); }
-
-  footer { border-top: 1px solid var(--line); padding: 16px 24px 40px; color: var(--muted); font-size: 12px; line-height: 1.9; }
-  footer a { color: #a8abff; }
-  .topline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 16px; margin-bottom: 4px; }
-  .lang-switch { margin: 0; color: var(--muted); font-size: 12px; }
-  .lang-switch a { color: #a8abff; }
-  .lang-switch a[aria-current] { color: var(--fg); font-weight: 700; text-decoration: none; }
-  .home-link { display: inline-block; color: var(--muted); font-size: 12px; text-decoration: none; }
-  .home-link:hover { color: var(--fg); text-decoration: underline; }
-  .home-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* Corners: boxes 6px, parts 4px, as in the shared block. */
+  .view, .checks { border-radius: 6px; }
+  .slot, .canvas-wrap { border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -133,7 +283,10 @@
 <header>
   <div class="topline">
     <a class="home-link" href="https://shiki365.github.io/">‹ shiki365 のツール置き場</a>
-    <p class="lang-switch" data-lang-switch></p>
+    <div class="prefs">
+      <p class="lang-switch" data-lang-switch></p>
+      <p class="theme-switch" data-theme-switch></p>
+    </div>
   </div>
   <h1>表紙入稿メーカー</h1>
   <p>同人誌の表紙の絵から、表1・背・表4 を1枚につないだ入稿用の表紙データ（塗り足しつき・CMYK の PDF）を作ります。背幅の計算と、描く人に渡すガイド画像も作れます。すべてブラウザの中だけで処理され、画像がどこかに送られることはありません。</p>
@@ -275,7 +428,7 @@
   ブラウザだけで動く無料ツールです。作ったデータは自由に使えます。仕上がりの色や大きさは、入稿の前に印刷所の条件と見比べてください。<br>
   <span data-i18n>同人誌の入稿データづくりを想定していますが、いずれの印刷所・団体とも関係のない<strong>非公式</strong>のツールです。</span><br>
   <a href="https://shiki365.github.io/">ほかのツールも見る（shiki365 のツール置き場）</a> ・ <a href="https://shiki365.github.io/#contact">不具合の報告・感想</a> ・ <a href="https://sabunomisogi.booth.pm/items/8891048">開発を応援する（BOOTH）</a><br>
-  <span>v1.0</span> ・ <span>最終更新</span> 2026-11-07
+  <span>v1.1</span> ・ <span>最終更新</span> 2026-11-13
 </footer>
 
 <!-- printers and papers: shared with the printer finder (doujin-printer-finder) -->
